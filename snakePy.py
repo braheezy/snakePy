@@ -7,55 +7,51 @@ FONT_COLOR = 'azure'
 SNAKE_BOARD_COLOR = 'white'
 LOSE_COLOR = 'red'
 SNAKE_COLOR = 'black'
-EXEC_SPEED = 100  # ms
-GAME_SPEED = 1000  # ms
+GAME_SPEED = 150  # ms
+'''
+Program flow:
+    create splash page
+    when Play is clicked, create game page
+    Lauch game logic loop
+        Executed at GAME_SPEED
+        On first movement, game begins
+        Snake auto-movement in direction of last press
+        Constant boundary detection starts
+'''
 
 
 class Snake(Frame):
-    state = {
+    # a dict holding state control for the app
+    app_state = {
+        # True if we should initialize the app
         "init_app": True,
+        # True if we should initialize the game view
         "init_game": False,
-        "game_loaded": False,
+        # True if the game is currently being played
         "game_active": False,
+        # True if a collision was detected during play
         "detected": False
     }
 
+    # a set holding state control for snake movement
+    current_move = "None"
+
+    # On class creation, designate root and kick off exec function
     def __init__(self, parent):
         Frame.__init__(self, parent)
         self.mainWindow = parent
 
-        self.snakeExec()
+        self.create_splash_widgets()
 
+    # core logic of game
+    # TODO: is this the right pattern to use with tkinter mainloop()?
     def snakeExec(self):
-        # create inital page
-        if self.state["init_app"]:
-            self.create_splash_widgets()
-            self.state["init_app"] = False
-        # create game page
-        elif self.state["init_game"]:
-            # game_loaded updated when snakeBoard is made
-            self.create_game_widgets()
-            self.state["init_game"] = False
-        # game loaded. assume its being played
-        elif self.state["game_loaded"]:
-            # if collided, clean up
-            if self.state['detected'] == True:
-                print("state says detected")
+        if self.app_state['game_active'] == True:
+            self.processMovement()
+            self.processDetection()
+            if self.app_state['detected'] == True:
                 self.detectionActions()
-            elif self.state['game_active'] == True:
-                self.processDetection()
-
-        self.mainWindow.after(EXEC_SPEED, self.snakeExec)
-
-    def detectionActions(self):
-        # update state
-        print("doing detection actions")
-        self.state['detected'] = False
-        self.state['game_active'] = False
-        # stop capturing movements
-        self.mainWindow.unbind("<Key>")
-        # change background color
-        self.snakeBoard.config(bg=LOSE_COLOR)
+        self.mainWindow.after(GAME_SPEED, self.snakeExec)
 
     # The initial view
     def create_splash_widgets(self):
@@ -98,12 +94,7 @@ class Snake(Frame):
                                 bg=APP_EMPHASIS_COLOR)
         self.lowerFrame.pack()
 
-    # Clear splash widgets and replace with game widgets
-    def onPlayClicked(self):
-        self.messageLabel.pack_forget()
-        self.playButton.pack_forget()
-        self.state["init_game"] = True
-
+    # The game view
     def create_game_widgets(self):
         middleFrameWidth = self.middleFrame.winfo_width()
 
@@ -157,19 +148,15 @@ class Snake(Frame):
 
         self.createSnakeBoard()
 
-    def resetGame(self):
-        self.state["game_loaded"] = False
-        # Re-create board
-        self.snakeBoard.destroy()
-        self.createSnakeBoard()
+        self.snakeExec()
 
+    # create the main snake board
     def createSnakeBoard(self):
         self.snakeBoard = Canvas(self.upperFrame,
                                  bg=SNAKE_BOARD_COLOR,
                                  width=300,
                                  height=300)
-        # Create the boundaries to determine collisions a.k.a. DEATHS
-        #self.defineBoundaries()
+
         # Draw the snake head and place on starting point
         # TODO: make start a random spot, but not near edges
         self.snakeBoard.create_oval(150,
@@ -183,56 +170,74 @@ class Snake(Frame):
         # TODO: game starts upon first move
         self.mainWindow.bind("<Key>", self.moveSnake)
         self.snakeBoard.pack()
-        self.state["game_loaded"] = True
 
+    # Clear splash widgets and replace with game widgets
+    def onPlayClicked(self):
+        self.messageLabel.pack_forget()
+        self.playButton.pack_forget()
+        #self.app_state["init_game"] = True
+        self.create_game_widgets()
+
+    # handle post-collision actions
+    def detectionActions(self):
+        # update app_state
+        print("doing detection actions")
+        self.app_state['detected'] = False
+        self.app_state['game_active'] = False
+        # stop capturing movements
+        self.mainWindow.unbind("<Key>")
+        # change background color
+        self.snakeBoard.config(bg=LOSE_COLOR)
+
+    # handle game reset when play again is clicked
+    def resetGame(self):
+        self.app_state["game_active"] = False
+        self.current_move = "None"
+        # Re-create board
+        self.snakeBoard.destroy()
+        self.createSnakeBoard()
+
+    # control snake movement
     def moveSnake(self, event):
-        # game starts on first move
-        if (self.state['game_active'] == False):
-            self.state['game_active'] = True
-
-        # process key event
-        # TODO: auto movement
         pressedKey = event.keysym
-        if (pressedKey == "Left"):
+
+        # game starts on first move
+        if (self.app_state['game_active'] == False):
+            self.app_state['game_active'] = True
+            self.current_move = pressedKey
+        else:
+            # set move_state from key event
+            # only update current move if allowed
+            if self.current_move == "Left" and pressedKey != "Right":
+                self.current_move = pressedKey
+            elif self.current_move == "Up" and pressedKey != "Down":
+                self.current_move = pressedKey
+            elif self.current_move == "Right" and pressedKey != "Left":
+                self.current_move = pressedKey
+            elif self.current_move == "Down" and pressedKey != "Up":
+                self.current_move = pressedKey
+
+    # continually redraw snake head in movement direction
+    def processMovement(self):
+        '''
+        Have "Move_States" for each direction snake should move
+        Move state is based on last pressed direction
+        Only allow moves in the 'forward' 3 directions:
+            Moving      Disallow
+            LEFT        RIGHT
+            UP          DOWN
+        '''
+        if self.current_move == 'Left':
             self.snakeBoard.move("snake_head", -10, 0)
-        elif (pressedKey == "Right"):
+        elif self.current_move == 'Right':
             self.snakeBoard.move("snake_head", 10, 0)
-        elif (pressedKey == "Up"):
+        elif self.current_move == 'Up':
             self.snakeBoard.move("snake_head", 0, -10)
-        elif (pressedKey == "Down"):
+        elif self.current_move == 'Down':
             self.snakeBoard.move("snake_head", 0, 10)
 
-    def defineBoundaries(self):
-        self.snakeBoard.create_line(0,
-                                    0,
-                                    0,
-                                    300,
-                                    width=20,
-                                    fill="green",
-                                    tags="leftSide")
-        self.snakeBoard.create_line(0,
-                                    0,
-                                    300,
-                                    0,
-                                    width=20,
-                                    fill="yellow",
-                                    tags="topSide")
-        self.snakeBoard.create_line(300,
-                                    0,
-                                    300,
-                                    300,
-                                    width=20,
-                                    fill="blue",
-                                    tags="rightSide")
-        self.snakeBoard.create_line(0,
-                                    300,
-                                    300,
-                                    300,
-                                    width=20,
-                                    fill="black",
-                                    tags="bottomSide")
-
     # check for snake_head overlapping any side
+    # TODO: also check snake_head overlapping any snake body parts
     def processDetection(self):
 
         # only detect new collisions
@@ -245,7 +250,7 @@ class Snake(Frame):
             self.snakeBoard.find_overlapping(0, 300, 300, 300)
 
         if detected:
-            self.state['detected'] = True
+            self.app_state['detected'] = True
 
 
 def main():
