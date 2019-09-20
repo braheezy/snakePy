@@ -11,21 +11,19 @@ LOSE_COLOR = 'red'
 SNAKE_COLOR = 'black'
 APPLE_COLOR = 'green'
 PIECE_SIZE = 10  # pixels
-GAME_SPEED = 300  # ms
+GAME_SPEED = 100  # ms
 
 ALLOWED_APPLE_RANGE = range(10, 290, PIECE_SIZE)
-ALLOWED_APPLE_RANGE_MIN = 10
-ALLOWED_APPLE_RANGE_MAX = 290
 ALLOWED_SNAKE_START_RANGE = range(50, 250, PIECE_SIZE)
 '''
 Program flow:
     create splash page
     when Play is clicked, create game page
-    Lauch game logic loop
+    Lauch game logic exec loop
         Executed at GAME_SPEED
         On first movement, game begins
         Snake auto-movement in direction of last press
-        Constant boundary detection and apple capture starts
+        Constant boundary detection and apple capture detection starts
         Apple generator starts
 '''
 
@@ -43,24 +41,30 @@ class Snake(Frame):
         "collision_detected": False
     }
 
-    # a set holding state control for snake movement
+    # the last commanded move and the direction snake should move in
     current_move = "None"
 
-    # On class creation, designate root and kick off exec function
+    # On class creation, designate root (parent) and make splash page
     def __init__(self, parent):
         Frame.__init__(self, parent)
         self.mainWindow = parent
-
         self.create_splash_widgets()
 
     # core logic of game
     # TODO: is this the right pattern to use with tkinter mainloop()?
     def snakeExec(self):
+
+        # only run loops during active game session
         if self.app_state['game_active'] == True:
             self.processMovement()
             self.processDetection()
             if self.app_state['collision_detected'] == True:
                 self.collisionDetectionActions()
+        '''
+        IMPORTANT
+        Makes the game run at speed. This dictates how
+        fast the snake will move, user input, boundary and apple detection
+        '''
         self.mainWindow.after(GAME_SPEED, self.snakeExec)
 
     # The initial view
@@ -104,6 +108,14 @@ class Snake(Frame):
                                 bg=APP_EMPHASIS_COLOR)
         self.lowerFrame.pack()
 
+    # Clear splash widgets and replace with game widgets
+    # Start game exec logic
+    def onPlayClicked(self):
+        self.messageLabel.pack_forget()
+        self.playButton.pack_forget()
+        self.create_game_widgets()
+        self.snakeExec()
+
     # The game view
     def create_game_widgets(self):
         middleFrameWidth = self.middleFrame.winfo_width()
@@ -115,11 +127,10 @@ class Snake(Frame):
                                           relief=GROOVE)
         self.lowerLeftMiddleFrame.pack(side=LEFT, padx=middleFrameWidth / 2)
 
-        # Special tk variables are needed to auto-update widgets
-        # http://effbot.org/tkinterbook/variable.htm
+        # set initial score
+        # current user score to display, in the special tkinter variable
         self.score = IntVar()
-        # TODO: use a function to update variable
-        self.score.set(0)
+        self.updateScore()
         # Labels to display current score
         self.scoreLabel = Label(self.lowerLeftMiddleFrame,
                                 font="bold",
@@ -158,8 +169,6 @@ class Snake(Frame):
 
         self.createSnakeBoard()
 
-        self.snakeExec()
-
     # create the main snake board and snake head
     def createSnakeBoard(self):
         self.snakeBoard = Canvas(self.upperFrame,
@@ -167,8 +176,7 @@ class Snake(Frame):
                                  width=300,
                                  height=300)
 
-        # Draw the snake head and place on starting point
-        # TODO: make start a random spot, but not near edges
+        # Draw the snake head and place on random starting point
         startCoord_x = random.choice(ALLOWED_SNAKE_START_RANGE)
         startCoord_y = random.choice(ALLOWED_SNAKE_START_RANGE)
         self.snakeBoard.create_oval(startCoord_x,
@@ -179,7 +187,6 @@ class Snake(Frame):
                                     tags="snake_head")
 
         # so the user can play from anywhere
-        # TODO: game starts upon first move
         self.mainWindow.bind("<Key>", self.moveSnake)
         self.snakeBoard.pack()
 
@@ -207,14 +214,14 @@ class Snake(Frame):
                                         appleCoord_y + PIECE_SIZE,
                                         fill=APPLE_COLOR,
                                         tags="apple")
+            # exactly 1 means the only item overlapping the area of interest
+            # is the snake head
             if self.checkIfAppleOnSnake() == 1:
                 break
 
-    # Clear splash widgets and replace with game widgets
-    def onPlayClicked(self):
-        self.messageLabel.pack_forget()
-        self.playButton.pack_forget()
-        self.create_game_widgets()
+    # accessor to tkinter variable updater
+    def updateScore(self, newScore=0):
+        self.score.set(newScore)
 
     # find if apple is overlapped with snake head
     # If no collision, returns tuple length of 1
@@ -230,7 +237,6 @@ class Snake(Frame):
     # handle post-collision actions
     def collisionDetectionActions(self):
         # update app_state
-        print("doing collision detection actions")
         self.app_state['collision_detected'] = False
         self.app_state['game_active'] = False
         # stop capturing movements
@@ -240,13 +246,17 @@ class Snake(Frame):
 
     # handle game reset when play again is clicked
     def resetGame(self):
+        # game only active after first move
         self.app_state["game_active"] = False
+        # clear out stale move
         self.current_move = "None"
+        # reset score
+        self.updateScore()
         # Re-create board
         self.snakeBoard.destroy()
         self.createSnakeBoard()
 
-    # control snake movement
+    # capture user commands for snake movement
     def moveSnake(self, event):
         pressedKey = event.keysym
 
@@ -256,7 +266,7 @@ class Snake(Frame):
             self.current_move = pressedKey
         else:
             # set move_state from key event
-            # only update current move if allowed
+            # only update current move if it's an allowed move
             if self.current_move == "Left" and pressedKey != "Right":
                 self.current_move = pressedKey
             elif self.current_move == "Up" and pressedKey != "Down":
@@ -266,7 +276,7 @@ class Snake(Frame):
             elif self.current_move == "Down" and pressedKey != "Up":
                 self.current_move = pressedKey
 
-    # continually redraw snake head in movement direction
+    # continually redraw snake head in current movement direction
     def processMovement(self):
         '''
         Have "Move_States" for each direction snake should move
@@ -277,18 +287,20 @@ class Snake(Frame):
             UP          DOWN
         '''
         if self.current_move == 'Left':
-            self.snakeBoard.move("snake_head", -10, 0)
+            self.snakeBoard.move("snake_head", -PIECE_SIZE, 0)
         elif self.current_move == 'Right':
-            self.snakeBoard.move("snake_head", 10, 0)
+            self.snakeBoard.move("snake_head", PIECE_SIZE, 0)
         elif self.current_move == 'Up':
-            self.snakeBoard.move("snake_head", 0, -10)
+            self.snakeBoard.move("snake_head", 0, -PIECE_SIZE)
         elif self.current_move == 'Down':
-            self.snakeBoard.move("snake_head", 0, 10)
+            self.snakeBoard.move("snake_head", 0, PIECE_SIZE)
 
     # check for snake_head overlapping any side or apples
     # TODO: also check snake_head overlapping any snake body parts
     def processDetection(self):
+        # check if snake has captured apple
         if self.checkIfAppleOnSnake() != 1:
+            self.updateScore(self.score.get() + 1)
             self.generateApple()
         # only detect new collisions
         # find_overlapping expects a rectangle, which a line is, right?
