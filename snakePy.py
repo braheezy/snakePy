@@ -1,4 +1,6 @@
+import random
 from tkinter import *
+from itertools import chain
 
 APP_EMPHASIS_COLOR = 'dodger blue'
 APP_BACKGROUND_COLOR = 'royal blue'
@@ -7,7 +9,14 @@ FONT_COLOR = 'azure'
 SNAKE_BOARD_COLOR = 'white'
 LOSE_COLOR = 'red'
 SNAKE_COLOR = 'black'
-GAME_SPEED = 150  # ms
+APPLE_COLOR = 'green'
+PIECE_SIZE = 10  # pixels
+GAME_SPEED = 300  # ms
+
+ALLOWED_APPLE_RANGE = range(10, 290, PIECE_SIZE)
+ALLOWED_APPLE_RANGE_MIN = 10
+ALLOWED_APPLE_RANGE_MAX = 290
+ALLOWED_SNAKE_START_RANGE = range(50, 250, PIECE_SIZE)
 '''
 Program flow:
     create splash page
@@ -16,7 +25,8 @@ Program flow:
         Executed at GAME_SPEED
         On first movement, game begins
         Snake auto-movement in direction of last press
-        Constant boundary detection starts
+        Constant boundary detection and apple capture starts
+        Apple generator starts
 '''
 
 
@@ -30,7 +40,7 @@ class Snake(Frame):
         # True if the game is currently being played
         "game_active": False,
         # True if a collision was detected during play
-        "detected": False
+        "collision_detected": False
     }
 
     # a set holding state control for snake movement
@@ -49,8 +59,8 @@ class Snake(Frame):
         if self.app_state['game_active'] == True:
             self.processMovement()
             self.processDetection()
-            if self.app_state['detected'] == True:
-                self.detectionActions()
+            if self.app_state['collision_detected'] == True:
+                self.collisionDetectionActions()
         self.mainWindow.after(GAME_SPEED, self.snakeExec)
 
     # The initial view
@@ -150,7 +160,7 @@ class Snake(Frame):
 
         self.snakeExec()
 
-    # create the main snake board
+    # create the main snake board and snake head
     def createSnakeBoard(self):
         self.snakeBoard = Canvas(self.upperFrame,
                                  bg=SNAKE_BOARD_COLOR,
@@ -159,10 +169,12 @@ class Snake(Frame):
 
         # Draw the snake head and place on starting point
         # TODO: make start a random spot, but not near edges
-        self.snakeBoard.create_oval(150,
-                                    150,
-                                    160,
-                                    160,
+        startCoord_x = random.choice(ALLOWED_SNAKE_START_RANGE)
+        startCoord_y = random.choice(ALLOWED_SNAKE_START_RANGE)
+        self.snakeBoard.create_oval(startCoord_x,
+                                    startCoord_y,
+                                    startCoord_x + PIECE_SIZE,
+                                    startCoord_y + PIECE_SIZE,
                                     fill=SNAKE_COLOR,
                                     tags="snake_head")
 
@@ -171,18 +183,55 @@ class Snake(Frame):
         self.mainWindow.bind("<Key>", self.moveSnake)
         self.snakeBoard.pack()
 
+        # make first apple
+        self.generateApple()
+
+    # generate apples in random spots on snake board
+    def generateApple(self):
+        '''
+        use PRNG to pick coord in snake board
+        do not generate apples:
+            on boundary
+            on current snake
+        '''
+
+        # keep trying to make new apples until a good one is made
+        while True:
+            # get rid of existing apple
+            self.snakeBoard.delete('apple')
+            appleCoord_x = random.choice(ALLOWED_APPLE_RANGE)
+            appleCoord_y = random.choice(ALLOWED_APPLE_RANGE)
+            self.snakeBoard.create_oval(appleCoord_x,
+                                        appleCoord_y,
+                                        appleCoord_x + PIECE_SIZE,
+                                        appleCoord_y + PIECE_SIZE,
+                                        fill=APPLE_COLOR,
+                                        tags="apple")
+            if self.checkIfAppleOnSnake() == 1:
+                break
+
     # Clear splash widgets and replace with game widgets
     def onPlayClicked(self):
         self.messageLabel.pack_forget()
         self.playButton.pack_forget()
-        #self.app_state["init_game"] = True
         self.create_game_widgets()
 
+    # find if apple is overlapped with snake head
+    # If no collision, returns tuple length of 1
+    # TODO: snake body
+    def checkIfAppleOnSnake(self):
+        snakeHeadCoords = self.snakeBoard.coords("snake_head")
+        return len(
+            self.snakeBoard.find_overlapping(snakeHeadCoords[0],
+                                             snakeHeadCoords[1],
+                                             snakeHeadCoords[2],
+                                             snakeHeadCoords[3]))
+
     # handle post-collision actions
-    def detectionActions(self):
+    def collisionDetectionActions(self):
         # update app_state
-        print("doing detection actions")
-        self.app_state['detected'] = False
+        print("doing collision detection actions")
+        self.app_state['collision_detected'] = False
         self.app_state['game_active'] = False
         # stop capturing movements
         self.mainWindow.unbind("<Key>")
@@ -236,21 +285,22 @@ class Snake(Frame):
         elif self.current_move == 'Down':
             self.snakeBoard.move("snake_head", 0, 10)
 
-    # check for snake_head overlapping any side
+    # check for snake_head overlapping any side or apples
     # TODO: also check snake_head overlapping any snake body parts
     def processDetection(self):
-
+        if self.checkIfAppleOnSnake() != 1:
+            self.generateApple()
         # only detect new collisions
         # find_overlapping expects a rectangle, which a line is, right?
         # check: left, top, right, bottom
-        detected = \
+        boundaryDetected = \
             self.snakeBoard.find_overlapping(0, 0, 0, 300) or \
             self.snakeBoard.find_overlapping(0, 0, 300, 0) or \
             self.snakeBoard.find_overlapping(300, 0, 300, 300) or \
             self.snakeBoard.find_overlapping(0, 300, 300, 300)
 
-        if detected:
-            self.app_state['detected'] = True
+        if boundaryDetected:
+            self.app_state['collision_detected'] = True
 
 
 def main():
