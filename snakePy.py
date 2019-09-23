@@ -13,10 +13,10 @@ SNAKE_HEAD_COLOR = 'black'
 SNAKE_TAIL_COLOR = 'purple'
 APPLE_COLOR = 'green'
 PIECE_SIZE = 10  # pixels
-GAME_SPEED = 600  # ms
+GAME_SPEED = 200  # ms
 
-ALLOWED_APPLE_RANGE = range(10, 290, PIECE_SIZE)
-ALLOWED_SNAKE_START_RANGE = range(50, 250, PIECE_SIZE)
+ALLOWED_APPLE_RANGE = range(100, 200, PIECE_SIZE)
+ALLOWED_SNAKE_START_RANGE = range(100, 200, PIECE_SIZE)
 '''
 Program flow:
     create splash page
@@ -27,6 +27,26 @@ Program flow:
         Snake auto-movement in direction of last press
         Constant boundary detection and apple capture detection starts
         Apple generator starts
+    While being played,
+        tkinter after() is used to run a loop along side mainloop()
+        process movement, which redraws snake every game cycle:
+            head moves, possibly in a new direction
+            all tail pieces move
+            head move is propogated to all tail pieces
+        check for detection:
+            boudaries: fail
+            apples: success
+            tail pieces: fail
+        on success:
+            add tail piece
+            make new apple, which:
+                cannot be on current snake
+                cannot be within 10 pixels of boundary
+        on fail:
+            stop capturing movement
+            reset various app states
+        on Play Again:
+            destroy and re-create snake board
 '''
 
 
@@ -46,6 +66,20 @@ class Snake(Frame):
     # current apple item id
     apple_id = 0
 
+    # current score and tail segments
+    score = None
+
+    # To track snakeNodes
+    # Could (and properly, should) have used a LinkedList parent
+    # class to manage the SnakeNodes, but it seemed like too much
+    # overhead for this project
+    snakeHead = None
+    currentTail = None
+
+    # using this allows us to capture multiple snake commands
+    # between draw cycles
+    currentDirection = None
+
     # On class creation, designate root (parent) and make splash page
     def __init__(self, parent):
         Frame.__init__(self, parent)
@@ -61,7 +95,7 @@ class Snake(Frame):
             self.processMovement()
             self.processDetection()
             if self.app_state['collision_detected'] == True:
-                self.collisionDetectionActions()
+                self.collisionDetectedActions()
         '''
         IMPORTANT
         Makes the game run at speed. This dictates how
@@ -132,7 +166,7 @@ class Snake(Frame):
         # set initial score
         # current user score to display, in the special tkinter variable
         self.score = IntVar()
-        self.updateScore()
+        self.score.set(0)
         # Labels to display current score
         self.scoreLabel = Label(self.lowerLeftMiddleFrame,
                                 font="bold",
@@ -190,13 +224,14 @@ class Snake(Frame):
             "coord_x": startCoord_x,
             "coord_y": startCoord_y,
             "color": SNAKE_HEAD_COLOR,
-            "tag": "snake_head"
+            "tag": "snake_head",
+            "direction": None,
+            "nextDirection": None
         }
-        # make linked list class head
-        self.snake = SnakeLinkedList()
-        self.snake.head = SnakeNode("None", self.snakeBoard, head_options)
+        # make snake head node
+        self.snakeHead = SnakeNode(board=self.snakeBoard, options=head_options)
         # on start, tail is head
-        self.currentTailNode = self.snake.head
+        self.currentTail = self.snakeHead
 
         # so the user can play from anywhere
         self.mainWindow.bind("<Key>", self.updateSnakeMovement)
@@ -252,7 +287,7 @@ class Snake(Frame):
             appleCoord_x = random.choice(ALLOWED_APPLE_RANGE)
             appleCoord_y = random.choice(ALLOWED_APPLE_RANGE)
             snakeHeadCoords = self.snakeBoard.coords(
-                self.snake.head.options["tag"])
+                self.snakeHead.options["tag"])
             self.snakeBoard.create_oval(appleCoord_x,
                                         appleCoord_y,
                                         appleCoord_x + PIECE_SIZE,
@@ -260,7 +295,7 @@ class Snake(Frame):
                                         fill=APPLE_COLOR,
                                         tags="apple")
             # exactly 1 means the only item overlapping the area of interest
-            # is the apple
+            # is the apple, which is what we want
             if self.checkIfAppleOnSnake(
                     appleCoord_x,
                     appleCoord_y,
@@ -269,12 +304,7 @@ class Snake(Frame):
                 self.apple_id = self.snakeBoard.find_overlapping(
                     appleCoord_x, appleCoord_y, appleCoord_x + PIECE_SIZE,
                     appleCoord_y + PIECE_SIZE)[0]
-                print("apple id is now %d" % self.apple_id)
                 break
-
-    # accessor to tkinter variable updater
-    def updateScore(self, newScore=0):
-        self.score.set(newScore)
 
     # find if generated apple is on snake
     def checkIfAppleOnSnake(
@@ -288,7 +318,7 @@ class Snake(Frame):
                                              appleCoord_y + PIECE_SIZE))
 
     # handle post-collision actions
-    def collisionDetectionActions(self):
+    def collisionDetectedActions(self):
         # update app_state
         self.app_state['collision_detected'] = False
         self.app_state['game_active'] = False
@@ -304,7 +334,7 @@ class Snake(Frame):
         # clear out stale move
         self.current_move = "None"
         # reset score
-        self.updateScore()
+        self.score.set(0)
         # Re-create board
         self.snakeBoard.destroy()
         self.createSnakeBoard()
@@ -316,170 +346,173 @@ class Snake(Frame):
         # game starts on first move
         if (self.app_state['game_active'] == False):
             self.app_state['game_active'] = True
-            self.snake.head.moveDirection = pressedKey
+            self.snakeHead.options['direction'] = pressedKey
+            self.currentDirection = pressedKey
         else:
-            # set move_state from key event
-            # only update current move if it's an allowed move
-            if self.snake.head.moveDirection == "Left" and pressedKey != "Right":
-                self.snake.head.moveDirection = pressedKey
-            elif self.snake.head.moveDirection == "Up" and pressedKey != "Down":
-                self.snake.head.moveDirection = pressedKey
-            elif self.snake.head.moveDirection == "Right" and pressedKey != "Left":
-                self.snake.head.moveDirection = pressedKey
-            elif self.snake.head.moveDirection == "Down" and pressedKey != "Up":
-                self.snake.head.moveDirection = pressedKey
+            # set head move direction from key event
+            # only update move if it's an allowed move
+            if self.currentDirection == "Left" and pressedKey != "Right":
+                self.snakeHead.options['direction'] = pressedKey
+            elif self.currentDirection == "Up" and pressedKey != "Down":
+                self.snakeHead.options['direction'] = pressedKey
+            elif self.currentDirection == "Right" and pressedKey != "Left":
+                self.snakeHead.options['direction'] = pressedKey
+            elif self.currentDirection == "Down" and pressedKey != "Up":
+                self.snakeHead.options['direction'] = pressedKey
+
+        self.snakeHead.options['nextDirection'] = self.snakeHead.options[
+            'direction']
 
     # continually redraw snake head in current movement direction
     def processMovement(self):
-        '''
-        Have "Move_States" for each direction snake should move
-        Move state is based on last pressed direction
-        Only allow moves in the 'forward' 3 directions:
-            Moving      Disallow
-            LEFT        RIGHT
-            UP          DOWN
-        '''
-        # if self.snake.head.moveDirection == 'Left':
-        #     self.snakeBoard.move("snake_head", -PIECE_SIZE, 0)
-        # elif self.snake.head.moveDirection == 'Right':
-        #     self.snakeBoard.move("snake_head", PIECE_SIZE, 0)
-        # elif self.snake.head.moveDirection == 'Up':
-        #     self.snakeBoard.move("snake_head", 0, -PIECE_SIZE)
-        # elif self.snake.head.moveDirection == 'Down':
-        #     self.snakeBoard.move("snake_head", 0, PIECE_SIZE)
-
-        # update all tail pieces with new head movement
-
-        self.propogateNewMove()
-
         # fairly standard way of traversing single linked list
-        currentSnakePart = self.snake.head
+        currentSnakePart = self.snakeHead
         while (currentSnakePart):
             tag = currentSnakePart.options["tag"]
-            if currentSnakePart.moveDirection == 'Left':
+            if currentSnakePart.options['direction'] == 'Left':
                 self.snakeBoard.move(tag, -PIECE_SIZE, 0)
-            elif currentSnakePart.moveDirection == 'Right':
+            elif currentSnakePart.options['direction'] == 'Right':
                 self.snakeBoard.move(tag, PIECE_SIZE, 0)
-            elif currentSnakePart.moveDirection == 'Up':
+            elif currentSnakePart.options['direction'] == 'Up':
                 self.snakeBoard.move(tag, 0, -PIECE_SIZE)
-            elif currentSnakePart.moveDirection == 'Down':
+            elif currentSnakePart.options['direction'] == 'Down':
                 self.snakeBoard.move(tag, 0, PIECE_SIZE)
             currentSnakePart = currentSnakePart.next
-        #self.moveTail()
+
+        self.currentDirection = self.snakeHead.options['direction']
+        # after move, update all tail segments for next cycle move
+        self.propogateNewMove()
 
     # loop through every tail piece and update move direction from its parent
     def propogateNewMove(self):
-
-        currentSnakePart = self.snake.head
-        while (currentSnakePart.next):
-            currentSnakePart.next.moveDirection = currentSnakePart.moveDirection
-            currentSnakePart = currentSnakePart.next
-
-    def moveTail(self):
-        # fairly standard way of traversing single linked list
-        currentSnakePart = self.snake.head.next
+        currentSnakePart = self.snakeHead
         while (currentSnakePart):
-            tag = currentSnakePart.options["tag"]
-            if currentSnakePart.moveDirection == 'Left':
-                self.snakeBoard.move(tag, -PIECE_SIZE, 0)
-            elif currentSnakePart.moveDirection == 'Right':
-                self.snakeBoard.move(tag, PIECE_SIZE, 0)
-            elif currentSnakePart.moveDirection == 'Up':
-                self.snakeBoard.move(tag, 0, -PIECE_SIZE)
-            elif currentSnakePart.moveDirection == 'Down':
-                self.snakeBoard.move(tag, 0, PIECE_SIZE)
+            # If more tail exists, propogate move direction before updating self direction
+            if (currentSnakePart.next):
+                currentSnakePart.next.options[
+                    'nextDirection'] = currentSnakePart.options['direction']
+            currentSnakePart.options['direction'] = currentSnakePart.options[
+                'nextDirection']
             currentSnakePart = currentSnakePart.next
 
-    # check for snake_head overlapping any side or apples
-    # TODO: also check snake_head overlapping any snake body parts
+    # check for snake_head hitting any side, self, or apples
     def processDetection(self):
-        # obtain current head
-        snakeHeadCoords = self.snakeBoard.coords(
-            self.snake.head.options["tag"])
+        '''
+        Item                Index
+            bounds           1-4
+            snake head       5
+            apple            self.apple_id
+        from find_overlapping, expect tuple:
+            (element_1, element_2)
 
-        # get tuple of objects over snake head location
-        overlappingObjects = self.snakeBoard.find_overlapping(
-            snakeHeadCoords[0], snakeHeadCoords[1], snakeHeadCoords[2],
-            snakeHeadCoords[3])
-        # if length of returned tupled is greater than 1, snake head
-        # is on something
+        Any touched items will be considered 'overlapping'
+        find_overlapping returns a tuple of items in the bound, referenced by
+        their index, which is determined by the order they are drawn on board
+
+        Note:
+            The first tail created, the 'neck', is drawn on pixels that overlap
+            the head. This threw off the original detection logic. After some experimenting,
+            decided it was best to if the head only detected collisions in 'front'
+            of it.
+            'Front' is defined as a small rectangle in front of the head. This prevents
+            detection logic from going off when snake head travels next to snake tails
+        '''
+        # obtain current head
+        snakeHeadCoords = self.snakeBoard.coords(self.snakeHead.options["tag"])
+
+        # only find overlapping objects in 'front' portion of head
+        # search for objects on the head, with an 1 pixel offset so
+        # head does not detect neck as 'overlapping'
+        headDirection = self.snakeHead.options["direction"]
+        if headDirection == "Left":
+            overlappingObjects = self.snakeBoard.find_overlapping(
+                snakeHeadCoords[0], snakeHeadCoords[1] + 1, snakeHeadCoords[0],
+                snakeHeadCoords[3] - 1)
+        elif headDirection == "Right":
+            overlappingObjects = self.snakeBoard.find_overlapping(
+                snakeHeadCoords[2], snakeHeadCoords[1] + 1, snakeHeadCoords[2],
+                snakeHeadCoords[3] - 1)
+        elif headDirection == "Down":
+            overlappingObjects = self.snakeBoard.find_overlapping(
+                snakeHeadCoords[0] + 1, snakeHeadCoords[3],
+                snakeHeadCoords[2] - 1, snakeHeadCoords[3])
+        elif headDirection == "Up":
+            overlappingObjects = self.snakeBoard.find_overlapping(
+                snakeHeadCoords[0] + 1, snakeHeadCoords[1],
+                snakeHeadCoords[2] - 1, snakeHeadCoords[1])
+
+        # tuple will always have len of 1, for the snake head. Anything greater
+        # means it hit something
         if (len(overlappingObjects) > 1):
-            print("apple id %d" % self.apple_id)
-            # hacky, but we only care about one object overlapping head
-            # and we know head is always the 5th cavas item made
-            if (overlappingObjects[0] < 5):
+            print(overlappingObjects)
+            # second element not apple, collided with something bad
+            if (overlappingObjects[1] != self.apple_id):
                 self.app_state['collision_detected'] = True
-            # all apples are made after snake
-            elif (overlappingObjects[1] == self.apple_id):
-                self.updateScore(self.score.get() + 1)
+            else:
+                # apple captured
+                # because special tkinter variables
+                self.score.set(self.score.get() + 1)
                 self.addTail()
                 self.generateApple()
-            # TODO: tail collision
-            else:
-                print(overlappingObjects)
-                print("tail collision")
-                pass
 
+    # append a new tail segment to the end of the snake
     def addTail(self):
         # get item we are appending to
         tailCoord_x = self.snakeBoard.coords(
-            self.currentTailNode.options["tag"])[0]
+            self.currentTail.options["tag"])[0]
         tailCoord_y = self.snakeBoard.coords(
-            self.currentTailNode.options["tag"])[1]
-        # apply correction to tail coordinates based on current direction of
-        # last tail
-        tailDirect = self.currentTailNode.moveDirection
-        # the '1' offset ensures snake pieces are not considered overlapping
+            self.currentTail.options["tag"])[1]
+
+        # Place new tail 'behind' snake
+        # apply correction to new tail coordinates based on direction of
+        # current tail
+        tailDirect = self.currentTail.options["direction"]
         if tailDirect == "Left":
-            offset_x = PIECE_SIZE + 1
+            offset_x = PIECE_SIZE
             offset_y = 0
         elif tailDirect == "Right":
-            offset_x = -PIECE_SIZE - 1
+            offset_x = -PIECE_SIZE
             offset_y = 0
         elif tailDirect == "Down":
             offset_x = 0
-            offset_y = -PIECE_SIZE - 1
+            offset_y = -PIECE_SIZE
         elif tailDirect == "Up":
             offset_x = 0
-            offset_y = PIECE_SIZE + 1
+            offset_y = PIECE_SIZE
         # build tail options
         tail_options = {
-            "id": SnakeNode.class_id,
+            "id": self.score.get(),
             "coord_x": tailCoord_x + offset_x,
             "coord_y": tailCoord_y + offset_y,
             "color": SNAKE_TAIL_COLOR,
-            "tag": "snake_tail_" + str(SnakeNode.class_id)
+            "tag": "snake_tail_" + str(self.score.get()),
+            "direction": tailDirect,
+            "nextDirection": None
         }
-        newTail = SnakeNode(tailDirect, self.snakeBoard, tail_options)
-        # set old tail's child to new tail
-        self.currentTailNode.next = newTail
-        # replace current tail status
-        self.currentTailNode = newTail
+        newTail = SnakeNode(self.snakeBoard, tail_options)
 
-
-class SnakeLinkedList:
-    def __init__(self):
-        self.head = None
+        self.currentTail.options['nextDirection'] = tailDirect
+        self.currentTail.next = newTail
+        # replace current tail with new tail
+        self.currentTail = newTail
 
 
 class SnakeNode:
-    # create a new node
+    # represents any segment of the snake, head included
+    # Linked List felt like the right call because of the need to:
+    #   1. have a list. Need to track each snake segment for collision purposes
+    #   2. dynamically grow that list
+    #   3. have each list item communicate data to the next list item, specifically,
+    #       which direction to move
     '''
     params:
-        currentMoveDirection: string
-        nextMoveDirection: string
         board: SnakeBoard Canvas
         options: dictionary
-            {id, coord_x, coord_y, color, tag}
+            {coord_x, coord_y, color, tag, direction, nextDirection}
         next: SnakeNode child
     '''
-    # current id to use
-    class_id = 0
-
-    def __init__(self, direction, board, options, next=None):
-        print("making new tail", direction, options)
-        self.id = options["id"]
-        self.moveDirection = direction
+    def __init__(self, board, options, next=None):
+        print("making new snakeNode with these options: ", options)
         self.next = next
         self.options = options
         board.create_oval(options["coord_x"],
@@ -488,7 +521,6 @@ class SnakeNode:
                           options["coord_y"] + PIECE_SIZE,
                           fill=options["color"],
                           tags=options["tag"])
-        self.class_id = self.class_id + 1
 
 
 def main():
