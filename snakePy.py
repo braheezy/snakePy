@@ -3,6 +3,8 @@ import pdb
 from tkinter import *
 from itertools import chain
 
+# App styling
+# TODO: cooler colors. or let the user set them
 APP_EMPHASIS_COLOR = 'dodger blue'
 APP_BACKGROUND_COLOR = 'royal blue'
 BUTTON_COLOR = 'sky blue'
@@ -12,41 +14,49 @@ LOSE_COLOR = 'red'
 SNAKE_HEAD_COLOR = 'black'
 SNAKE_TAIL_COLOR = 'purple'
 APPLE_COLOR = 'green'
-PIECE_SIZE = 10  # pixels
-GAME_SPEED = 200  # ms
 
-ALLOWED_APPLE_RANGE = range(100, 200, PIECE_SIZE)
+# Game settings
+# TODO: implement a difficulty setting for the user that updates these values
+BOARD_WIDTH = 300  # pixels
+BOARD_HEIGHT = 300  # pixels
+PIECE_SIZE = 10  # pixels
+# no points for the snake head, so minus 1
+MAX_SCORE = BOARD_WIDTH * BOARD_HEIGHT - 1  # apples
+GAME_SPEED = 150  # ms
+# apples cannot be placed within 10 pixels of the boundary
+ALLOWED_APPLE_RANGE = range(10, 290, PIECE_SIZE)
+# snake starts at least 100 pixels from any boundary
 ALLOWED_SNAKE_START_RANGE = range(100, 200, PIECE_SIZE)
 '''
 Program flow:
     create splash page
     when Play is clicked, create game page
-    Lauch game logic exec loop
+    Lauch game logic exec loop:
         Executed at GAME_SPEED
-        On first movement, game begins
+        On first snake movement, game begins
         Snake auto-movement in direction of last press
-        Constant boundary detection and apple capture detection starts
-        Apple generator starts
+        Constant collision detection and apple capture detection starts
     While being played,
         tkinter after() is used to run a loop along side mainloop()
-        process movement, which redraws snake every game cycle:
-            head moves, possibly in a new direction
-            all tail pieces move
-            head move is propogated to all tail pieces
-        check for detection:
-            boudaries: fail
-            apples: success
-            tail pieces: fail
-        on success:
-            add tail piece
-            make new apple, which:
-                cannot be on current snake
-                cannot be within 10 pixels of boundary
-        on fail:
-            stop capturing movement
-            reset various app states
-        on Play Again:
-            destroy and re-create snake board
+            do snake movement, redraws snake every game cycle:
+                head moves, possibly in a new direction
+                all tail pieces move
+            check for detection:
+                boudaries: fail
+                apples: success
+                tail pieces: fail
+            on success:
+                add tail piece
+                make new apple, which:
+                    cannot be on current snake
+                    cannot be within 10 pixels of boundary
+            on fail:
+                stop capturing movement
+                reset various app states
+            on Play Again:
+                finish cleaning up app states
+                destroy and re-create snake board
+            await for first snake movement and start again!
 '''
 
 
@@ -209,8 +219,8 @@ class Snake(Frame):
     def createSnakeBoard(self):
         self.snakeBoard = Canvas(self.upperFrame,
                                  bg=SNAKE_BOARD_COLOR,
-                                 width=300,
-                                 height=300)
+                                 width=BOARD_WIDTH,
+                                 height=BOARD_HEIGHT)
 
         # Create the boundaries to determine collisions a.k.a. DEATHS
         self.defineBoundaries()
@@ -245,28 +255,28 @@ class Snake(Frame):
         self.snakeBoard.create_line(0,
                                     0,
                                     0,
-                                    300,
+                                    BOARD_HEIGHT,
                                     width=1,
                                     fill="green",
                                     tags="leftSide")
         self.snakeBoard.create_line(0,
                                     0,
-                                    300,
+                                    BOARD_WIDTH,
                                     0,
                                     width=1,
                                     fill="yellow",
                                     tags="topSide")
-        self.snakeBoard.create_line(300,
+        self.snakeBoard.create_line(BOARD_WIDTH,
                                     0,
-                                    300,
-                                    300,
+                                    BOARD_WIDTH,
+                                    BOARD_HEIGHT,
                                     width=1,
                                     fill="blue",
                                     tags="rightSide")
         self.snakeBoard.create_line(0,
-                                    300,
-                                    300,
-                                    300,
+                                    BOARD_HEIGHT,
+                                    BOARD_WIDTH,
+                                    BOARD_HEIGHT,
                                     width=1,
                                     fill="black",
                                     tags="bottomSide")
@@ -365,6 +375,11 @@ class Snake(Frame):
 
     # continually redraw snake head in current movement direction
     def processMovement(self):
+        '''
+        To move the snake, start at the head and move each tail according to 
+        it's saved direction. After the move, each tail piece needs to update it's 
+        direction from it's parent
+        '''
         # fairly standard way of traversing single linked list
         currentSnakePart = self.snakeHead
         while (currentSnakePart):
@@ -444,7 +459,6 @@ class Snake(Frame):
         # tuple will always have len of 1, for the snake head. Anything greater
         # means it hit something
         if (len(overlappingObjects) > 1):
-            print(overlappingObjects)
             # second element not apple, collided with something bad
             if (overlappingObjects[1] != self.apple_id):
                 self.app_state['collision_detected'] = True
@@ -452,8 +466,13 @@ class Snake(Frame):
                 # apple captured
                 # because special tkinter variables
                 self.score.set(self.score.get() + 1)
-                self.addTail()
-                self.generateApple()
+                # did they win?
+                if (self.score.get() != MAX_SCORE):
+                    self.addTail()
+                    self.generateApple()
+                else:
+                    # handle win condition
+                    pass
 
     # append a new tail segment to the end of the snake
     def addTail(self):
@@ -512,7 +531,6 @@ class SnakeNode:
         next: SnakeNode child
     '''
     def __init__(self, board, options, next=None):
-        print("making new snakeNode with these options: ", options)
         self.next = next
         self.options = options
         board.create_oval(options["coord_x"],
