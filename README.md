@@ -4,7 +4,7 @@ The classic game Snake implemented with Python 3.
 
 To run:
 
-- download from github
+- download from github (`git clone` or grab the raw zip)
 - `cd snakePy`
 - `python snakePy.py` or `python3 snakePy.py`
 
@@ -20,8 +20,7 @@ a linear path to get here by any means but it feels great to finally code Snake.
 
 I learned or improved on the following while making this program:
 
-- Event-driven/GUI programming
-- [GUI Programming Help](http://www.alan-g.me.uk/tutor/tutgui.htm)
+- Event-driven/GUI programming [GUI Programming Help](http://www.alan-g.me.uk/tutor/tutgui.htm)
 - Python OOP and virtual environments
 - [tkinter](http://effbot.org/tkinterbook/)
 - State-driven application architecture
