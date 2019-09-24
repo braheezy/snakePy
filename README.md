@@ -8,7 +8,7 @@ To run:
 - `cd snakePy`
 - `python snakePy.py` or `python3 snakePy.py`
 
-=== Thoughts ===
+## Thoughts
 I wrote this program because I wanted something to whet my skills
 on. When I first wanted to get into programming, I wanted
 a Snake-like game to support a blockchain education platform we wanted to build.
