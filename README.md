@@ -8,6 +8,22 @@ To run:
 - `cd snakePy`
 - `python snakePy.py` or `python3 snakePy.py`
 
+## Screens
+Splash view
+<p align="center">
+  <img src="https://github.com/mbraha/snakePy/blob/master/screenshots/splash.png">
+</p>
+
+Game start view
+<p align="center">
+  <img src="https://github.com/mbraha/snakePy/blob/master/screenshots/start.png">
+</p>
+
+Game Over view
+<p align="center">
+  <img src="https://github.com/mbraha/snakePy/blob/master/screenshots/fail.png">
+</p>
+
 ## Thoughts
 I wrote this program because I wanted something to whet my skills
 on. When I first wanted to get into programming, I wanted
