@@ -2,7 +2,9 @@
 
 The classic game Snake implemented with Python 3.
 
-To run:
+Now available online: [Play on Repl.it](https://repl.it/@mbraha/SnakePy)
+
+To run locally:
 
 - download from github (`git clone` or grab the raw zip)
 - `cd snakePy`
